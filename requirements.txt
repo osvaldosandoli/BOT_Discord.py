@@ -1,0 +1,5 @@
+pip install discord.py youtube_dl
+pip install yt-dlp
+pip install pynacl
+
+//MTMzODM1MjEwNzA2OTI0NzU3MQ.Gt07f2.vLc9JWf4BE2tOidVfOrPtMxgKaArqPs7h9d7og
