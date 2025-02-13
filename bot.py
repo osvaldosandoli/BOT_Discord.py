@@ -168,4 +168,4 @@ async def midV(ctx):
     else:
         await ctx.send("❌ O bot não está tocando nada no momento.")
 
-bot.run('MTMzODM1MjEwNzA2OTI0NzU3MQ.Gt07f2.vLc9JWf4BE2tOidVfOrPtMxgKaArqPs7h9d7og')
+bot.run('seuToken')
