@@ -7,4 +7,5 @@
 
 
 <h2> BOT em execução </h2>
-![image](https://github.com/user-attachments/assets/8cf258d8-977f-429a-8038-55806e8ac5f3)
+![Uploading image.png…]()
+
