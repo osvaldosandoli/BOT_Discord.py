@@ -1,5 +1,6 @@
+import random
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import yt_dlp as youtube_dl
 import os
 import asyncio
@@ -17,6 +18,7 @@ else:
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # ADICIONE ESTA LINHA
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
@@ -62,9 +64,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, executable=FFMPEG_PATH, **ffmpeg_options), data=data)
 
+# Inicia a tarefa assim que o bot estiver pronto
 @bot.event
-async def on_ready():
+async def on_ready_with_task():
     print(f'Bot {bot.user} está online!')
+    if not rotate_joker_task.is_running():
+        rotate_joker_task.start()
+        print("Task do Joker iniciada!")
+
 
 @bot.command(name='join', help='Faz o bot entrar no canal de voz')
 async def join(ctx):
@@ -101,6 +108,7 @@ async def play(ctx, url):
         
         # Adiciona a música na fila
         music_queue.append(player)
+        print(music_queue)
 
         if not ctx.voice_client.is_playing():
             await play_next(ctx)
@@ -152,15 +160,15 @@ async def up(ctx):
     else:
         await ctx.send("❌ O bot não está tocando nada no momento.")
 
-@bot.command(name='down', help='Aumenta o volume para o máximo')
+@bot.command(name='down', help='Diminui o volume')
 async def down(ctx):
     if ctx.voice_client and ctx.voice_client.source:
-        ctx.voice_client.source.volume = 0  # Zera o volume
-        await ctx.send("❌ Bot mutado!")
+        ctx.voice_client.source.volume = 0.2  # Diminui o volume
+        await ctx.send("❌ Volume baixo!")
     else:
         await ctx.send("❌ O bot não está tocando nada no momento.")
 
-@bot.command(name='midV', help='Aumenta o volume para o máximo')
+@bot.command(name='midV', help='Volume normal')
 async def midV(ctx):
     if ctx.voice_client and ctx.voice_client.source:
         ctx.voice_client.source.volume = 0.5 
@@ -168,4 +176,110 @@ async def midV(ctx):
     else:
         await ctx.send("❌ O bot não está tocando nada no momento.")
 
-bot.run('seuToken')
+@bot.command(name='addcargo', help='Adiciona um cargo a um usuário. Uso: !addcargo @usuario NomeDoCargo')
+@commands.has_permissions(manage_roles=True) # Apenas usuários com permissão podem usar
+async def add_role(ctx, member: discord.Member, *, role_name: str):
+    # Procura o cargo no servidor pelo nome
+    role = discord.utils.get(ctx.guild.roles, name=role_name)
+    
+    if role is None:
+        await ctx.send(f"❌ O cargo '{role_name}' não foi encontrado.")
+        return
+
+    try:
+        # Adiciona o cargo ao membro mencionado
+        await member.add_roles(role)
+        await ctx.send(f"✅ O cargo **{role.name}** foi adicionado com sucesso a {member.mention}!")
+    except discord.Forbidden:
+        await ctx.send("❌ Eu não tenho permissão para adicionar esse cargo (verifique a hierarquia).")
+    except Exception as e:
+        await ctx.send(f"❌ Ocorreu um erro: {e}")
+
+# Tratamento de erro caso o usuário não tenha permissão para usar o comando
+@add_role.error
+async def add_role_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Você não tem permissão para gerenciar cargos.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Uso correto: `!addcargo @usuario NomeDoCargo`")
+
+
+# Nome do cargo que será alternado
+JOKER_ROLE_NAME = "joker"
+
+async def run_rotation(guild):
+    """Função auxiliar para rodar a lógica em um servidor específico"""
+    role = discord.utils.get(guild.roles, name=JOKER_ROLE_NAME)
+    
+    if role is None:
+        print(f"⚠️ Cargo '{JOKER_ROLE_NAME}' não encontrado no servidor {guild.name}.")
+        return
+
+    # 1. Remover o cargo de quem já tem
+    for member in role.members:
+        try:
+            await member.remove_roles(role)
+            print(f"✅ Cargo removido de {member.name}")
+        except discord.Forbidden:
+            print(f"❌ Erro de Hierarquia: O cargo '{JOKER_ROLE_NAME}' está acima do meu cargo em {guild.name}!")
+        except Exception as e:
+            print(f"❌ Erro ao remover cargo em {guild.name}: {e}")
+
+    # 2. Escolher um novo usuário aleatório (que não seja bot)
+    human_members = [m for m in guild.members if not m.bot]
+    
+    if human_members:
+        new_dictator = random.choice(human_members)
+        try:
+            await new_dictator.add_roles(role)
+            
+            # 3. Anúncio no canal
+            channel = guild.system_channel or next((x for x in guild.text_channels if x.permissions_for(guild.me).send_messages), None)
+            if channel:
+                embed = discord.Embed(
+                    title="🤡 NOVA DITADURA ESTABELECIDA!",
+                    description=f"Curvem-se! {new_dictator.mention} é o novo **Joker**!",
+                    color=0xFF0000
+                )
+                embed.set_thumbnail(url=new_dictator.display_avatar.url)
+                await channel.send(content="@everyone", embed=embed)
+            print(f"✅ {new_dictator.name} promovido a Joker em {guild.name}")
+        except discord.Forbidden:
+            print(f"❌ Sem permissão para adicionar o cargo em {guild.name}. Verifique a hierarquia!")
+        except Exception as e:
+            print(f"❌ Erro ao adicionar cargo: {e}")
+
+# Task automática
+@tasks.loop(hours=24)
+async def rotate_joker_task():
+    if not bot.is_ready():
+        return
+    for guild in bot.guilds:
+        await run_rotation(guild)
+
+#################################### INCIO METODOS AUXILIARES ####################################
+
+# Comando de Teste (Agora foca APENAS no servidor onde foi enviado)
+
+# @bot.command(name='rodar_joker')
+# @commands.has_permissions(administrator=True)
+# async def force_rotate(ctx):
+#     await ctx.send(f"🔄 Iniciando rotação forçada no servidor: **{ctx.guild.name}**...")
+#     await run_rotation(ctx.guild)
+#     await ctx.send("✅ Processo concluído. Verifique o console para detalhes.")
+
+# @bot.command(name='listarcargos')
+# @commands.has_permissions(manage_roles=True)
+# async def list_roles(ctx):
+#     # Lista todos os nomes de cargos, ignorando o @everyone
+#     roles = [role.name for role in ctx.guild.roles if role.name != "@everyone"]
+    
+#     if roles:
+#         lista = "\n".join(roles)
+#         await ctx.send(f"**Cargos disponíveis neste servidor:**\n```\n{lista}\n```")
+#     else:
+#         await ctx.send("Não encontrei cargos neste servidor.")
+
+#################################### FIM METODOS AUXILIARES ####################################
+
+bot.run(os.getenv("KeyBot")) ## TOKEN DO BOT
