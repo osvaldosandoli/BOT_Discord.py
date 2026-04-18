@@ -4,8 +4,14 @@ from discord.ext import commands, tasks
 import yt_dlp as youtube_dl
 import os
 import asyncio
+from datetime import time, timezone, timedelta
+import datetime
+from dotenv import load_dotenv
 
 from collections import deque
+
+fuso_brasilia = timezone(timedelta(hours=-3))  # Fuso horário de Brasília (UTC-3)
+horario_exec = time(hour=0, minute=0, second=0, tzinfo=fuso_brasilia)  # Horário de execução (00:00)
 
 # Caminho relativo para o ffmpeg dentro do projeto
 FFMPEG_PATH = os.path.join(os.getcwd(), "ffmpeg", "bin", "ffmpeg.exe")
@@ -66,7 +72,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
 # Inicia a tarefa assim que o bot estiver pronto
 @bot.event
-async def on_ready_with_task():
+async def on_ready():
     print(f'Bot {bot.user} está online!')
     if not rotate_joker_task.is_running():
         rotate_joker_task.start()
@@ -250,7 +256,7 @@ async def run_rotation(guild):
             print(f"❌ Erro ao adicionar cargo: {e}")
 
 # Task automática
-@tasks.loop(hours=24)
+@tasks.loop(time=horario_exec)
 async def rotate_joker_task():
     if not bot.is_ready():
         return
@@ -281,5 +287,5 @@ async def rotate_joker_task():
 #         await ctx.send("Não encontrei cargos neste servidor.")
 
 #################################### FIM METODOS AUXILIARES ####################################
-
-bot.run(os.getenv("KeyBot")) ## TOKEN DO BOT
+load_dotenv()
+bot.run(os.getenv('KeyBot')) ## TOKEN DO BOT
